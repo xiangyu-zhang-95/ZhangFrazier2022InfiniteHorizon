@@ -71,7 +71,7 @@ class fluid_model():
         m.optimize()
         self.model = m
     
-    def simulate(self, priority):
+    def deterministic_simulate(self, priority):
         params = self.params
         num_actions, num_states, T, gamma, r, init_occupation, P0, P1, budgets =\
             params["num_actions"], params["num_states"], params["T"], params["gamma"], \

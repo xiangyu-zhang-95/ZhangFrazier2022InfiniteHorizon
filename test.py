@@ -6,7 +6,7 @@ import pandas as pd
 
 from fluid_model import fluid_model
 
-def test_1():
+def test_runnable():
     np.random.seed(1014)
 
     num_actions = 2
@@ -85,3 +85,53 @@ def test_bayesian_bandit():
     fluid = fluid_model(params)
     fluid.solve()
     assert(np.isclose(fluid.model.objVal, 3.516196286))
+
+def test_isfeasible():
+    num_actions = 2
+    num_states = 4
+    T = 5000
+    gamma = 0.99999999
+
+    # r, init_occupation, P0, P1, budgets
+    r = np.array([
+        [-1, -1],
+        [0, 0],
+        [0, 0],
+        [1, 1],
+    ])
+
+    init_occupation = np.array([1/6, 1/3, 1/2, 0])
+    # init_occupation = np.array([1/6, 1/3, 1/4, 1/4])
+    P1 = np.array([
+        [1/2, 1/2,   0, 0  ],
+        [  0, 1/2, 1/2, 0  ],
+        [  0,   0, 1/2, 1/2],
+        [1/2,   0,   0, 1/2],
+    ])
+
+    P0 = np.array([
+        [1/2,   0,   0, 1/2],
+        [1/2, 1/2,   0, 0  ],
+        [  0, 1/2, 1/2, 0  ],
+        [  0,   0, 1/2, 1/2],
+    ])
+
+    budgets = [2/3] * 5000
+
+    params = {
+        "num_actions": num_actions, "num_states": num_states, 
+        "T": T, "gamma": gamma, "r": r, "init_occupation": init_occupation, 
+        "P0": P0, "P1": P1, "budgets": budgets
+    }
+
+    fluid = fluid_model(params)
+
+    def test_output(a, b):
+        return a[0] == b[0] and np.isclose(a[1], b[1])
+
+    assert(
+        test_output(fluid.is_feasible([False, False, True, False], 2), [True,  1  ]) and
+        test_output(fluid.is_feasible([False, True,  True, False], 1), [True,  1/2]) and
+        test_output(fluid.is_feasible([True,  True,  True, False], 0), [True, -1/2]) and
+        test_output(fluid.is_feasible([True,  True,  True,  True], 3), [True, -1  ])
+    )

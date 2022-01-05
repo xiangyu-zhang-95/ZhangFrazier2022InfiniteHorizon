@@ -1,7 +1,7 @@
 {
 "num_actions": 2,
 "num_states": 4,
-"T": 5000,
+"T": 100,
 "gamma": 0.5,
 
 "r": [

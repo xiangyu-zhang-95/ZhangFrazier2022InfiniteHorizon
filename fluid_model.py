@@ -110,6 +110,9 @@ class fluid_model():
         return rewards
     
     def _simu(self, priority, n, m, get_pull):
+        """
+        get_pull(states, t, priority)
+        """
         params = self.params
         num_actions, num_states, T, gamma, r, init_occupation, P0, P1, budgets =\
             params["num_actions"], params["num_states"], params["T"], params["gamma"], \
@@ -191,7 +194,7 @@ class fluid_model():
             assert(sum(pull) == budget)
             return pull
 
-        return self._simu(priority, n, m, get_pull)        
+        return self._simu(priority, n, m, get_pull)
 
 
     def simulate_index(self, priority, n, m):
@@ -200,14 +203,9 @@ class fluid_model():
             params["num_actions"], params["num_states"], params["T"], params["gamma"], \
             params["r"], params["init_occupation"], params["P0"], params["P1"], \
             params["budgets"]
-        
-        assert(isinstance(priority, tuple))
-        assert(len(priority) == len(set(priority)))
-        assert(sum(priority) == num_states * (num_states - 1) // 2)
-        assert(isinstance(n, int))
-        assert(n > 0)
 
-        def get_pull(states, priority, budget):
+        def get_pull(states, t, priority):
+            budget = round(budgets[t] * n)
             pull = [0] * len(states)
             for i in priority:
                 if budget == 0:
@@ -216,26 +214,7 @@ class fluid_model():
                 pull[i] = min(budget, states[i])
                 budget -= pull[i]
             return pull
-        
-        rewards_list = []
-        for _ in tqdm(range(m)):
-            rewards = 0
-            states = np.around(init_occupation * n).astype(int)
-            for t in range(T):
-                pull = get_pull(states, priority, int(budgets[t] * n))
-                idle = states - pull
-                rewards += (idle @ r[:, 0] + pull @ r[:, 1]) * gamma**t
-
-                # states = pull @ P1 + idle @ P0
-                states = np.zeros((num_states, ))
-                for idx, count in enumerate(pull):
-                    states += np.random.binomial(count, P1[idx])
-                for idx, count in enumerate(idle):
-                    states += np.random.binomial(count, P0[idx])
-                
-                assert(states.shape == (num_states, ))
-            rewards_list.append(rewards)
-        return np.array(rewards_list)
+        return self._simu(priority, n, m, get_pull)
     
 
     def is_feasible(self, active, tie_idx):

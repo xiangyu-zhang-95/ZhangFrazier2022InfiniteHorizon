@@ -70,3 +70,35 @@ class fluid_model():
 
         m.optimize()
         self.model = m
+    
+    def simulate(self, priority):
+        params = self.params
+        num_actions, num_states, T, gamma, r, init_occupation, P0, P1, budgets =\
+            params["num_actions"], params["num_states"], params["T"], params["gamma"], \
+            params["r"], params["init_occupation"], params["P0"], params["P1"], \
+            params["budgets"]
+        
+        assert(isinstance(priority, list))
+        assert(len(priority) == len(set(priority)))
+        assert(sum(priority) == num_states * (num_states - 1) // 2)
+
+        def get_pull(states, priority, budget):
+            pull = [0] * len(states)
+            for i in priority:
+                if np.isclose(budget, 0):
+                    break
+
+                pull[i] = min(budget, states[i])
+                budget -= pull[i]
+            return pull
+
+        
+        rewards = 0
+        states = init_occupation
+        for t in range(T):
+            pull = get_pull(states, priority, budgets[t])
+            idle = states - pull
+            rewards += (idle @ r[:, 0] + pull @ r[:, 1]) * gamma**t
+            states = pull @ P1 + idle @ P0
+            assert(states.shape == (num_states, ))
+        return rewards

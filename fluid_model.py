@@ -4,6 +4,7 @@ from gurobipy import GRB
 import pandas as pd
 from tqdm import tqdm
 from multiprocessing import Pool
+from math import ceil, floor
 
 class fluid_model():
     def __init__(self, params):
@@ -53,7 +54,10 @@ class fluid_model():
 
             names = [f"x_{t}({s}, 1)" for s in range(num_states)]
             occupation1.append(pd.Series(m.addVars(names), index=names))
-
+        
+        self.occupation0 = occupation0
+        self.occupation1 = occupation1
+        
         # initial constraints
         m.addConstrs(occupation0[0][s] + occupation1[0][s] == init_occupation[s] for s in range(num_states))
 
@@ -105,6 +109,78 @@ class fluid_model():
             assert(states.shape == (num_states, ))
         return rewards
     
+    def simulate_fluid_balance(self, priority, n, m):
+        params = self.params
+        num_actions, num_states, T, gamma, r, init_occupation, P0, P1, budgets =\
+            params["num_actions"], params["num_states"], params["T"], params["gamma"], \
+            params["r"], params["init_occupation"], params["P0"], params["P1"], \
+            params["budgets"]
+        
+        assert(isinstance(priority, tuple))
+        assert(len(priority) == len(set(priority)))
+        assert(sum(priority) == num_states * (num_states - 1) // 2)
+        assert(isinstance(n, int))
+        assert(n > 0)
+
+        def get_pull(states, t, priority, budget):
+            assert(isinstance(states, np.ndarray))
+            assert(sum(states) == n)
+            
+            occupation0 = np.array([var.X for var in self.occupation0[t]])
+            occupation1 = np.array([var.X for var in self.occupation1[t]])
+            z = occupation0 + occupation1
+            assert(np.isclose(z.sum(), 1))
+            assert(np.isclose(occupation1.sum(), budget / n))
+
+            z_hat = (states - z * n) / np.sqrt(n)
+            pull = np.zeros((num_states, )).astype(int)
+            for i in priority:
+                pull[i] = min(states[i], 
+                              ceil(occupation1[i] * n + np.sqrt(n) * np.abs(z_hat[i]))
+                             )
+                
+            for i in priority[::-1]:
+                if sum(pull) <= budget:
+                    break
+                
+                # sum(pull) > budget
+                left = sum(pull) - budget
+                pull[i] -= min(left, 
+                               pull[i] - max(0, 
+                                             floor(occupation1[i] * n - np.sqrt(n) * np.abs(z_hat[i]))
+                                            )
+                                )
+            assert(sum(pull) == budget)
+            return pull
+
+        rewards_list = []
+        for _ in tqdm(range(m)):
+            rewards = 0
+            states = np.around(init_occupation * n).astype(int)
+            for t in range(T):
+                pull = get_pull(states, t, priority, round(budgets[t] * n))
+                idle = states - pull
+                rewards += (idle @ r[:, 0] + pull @ r[:, 1]) * gamma**t
+
+                # states = pull @ P1 + idle @ P0
+                states = np.zeros((num_states, )).astype(int)
+                for idx, count in enumerate(pull):
+                    tmp = np.random.choice(num_states, count, p=P1[idx])
+                    states += np.histogram(
+                                np.random.choice(num_states, count, p=P1[idx]),
+                                list(range(num_states + 1)))[0]
+                for idx, count in enumerate(idle):
+                    states += np.histogram(
+                                np.random.choice(num_states, count, p=P0[idx]),
+                                list(range(num_states + 1)))[0]
+                        
+                
+                assert(states.shape == (num_states, ))
+                assert(sum(states) == n)
+            rewards_list.append(rewards)
+        return np.array(rewards_list)
+        
+
 
     def simulate_index(self, priority, n, m):
         params = self.params
@@ -132,7 +208,7 @@ class fluid_model():
         rewards_list = []
         for _ in tqdm(range(m)):
             rewards = 0
-            states = (init_occupation * n).astype(int)
+            states = np.around(init_occupation * n).astype(int)
             for t in range(T):
                 pull = get_pull(states, priority, int(budgets[t] * n))
                 idle = states - pull

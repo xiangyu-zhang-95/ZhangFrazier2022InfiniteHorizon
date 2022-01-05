@@ -109,7 +109,43 @@ class fluid_model():
             assert(states.shape == (num_states, ))
         return rewards
     
+    def _simu(self, priority, n, m, get_pull):
+        params = self.params
+        num_actions, num_states, T, gamma, r, init_occupation, P0, P1, budgets =\
+            params["num_actions"], params["num_states"], params["T"], params["gamma"], \
+            params["r"], params["init_occupation"], params["P0"], params["P1"], \
+            params["budgets"]
+        
+        rewards_list = []
+        for _ in tqdm(range(m)):
+            rewards = 0
+            states = np.around(init_occupation * n).astype(int)
+            for t in range(T):
+                pull = get_pull(states, t, priority)
+                idle = states - pull
+                rewards += (idle @ r[:, 0] + pull @ r[:, 1]) * gamma**t
+
+                # states = pull @ P1 + idle @ P0
+                states = np.zeros((num_states, )).astype(int)
+                for idx, count in enumerate(pull):
+                    tmp = np.random.choice(num_states, count, p=P1[idx])
+                    states += np.histogram(
+                                np.random.choice(num_states, count, p=P1[idx]),
+                                list(range(num_states + 1)))[0]
+                for idx, count in enumerate(idle):
+                    states += np.histogram(
+                                np.random.choice(num_states, count, p=P0[idx]),
+                                list(range(num_states + 1)))[0]
+                        
+                
+                assert(states.shape == (num_states, ))
+                assert(sum(states) == n)
+            rewards_list.append(rewards)
+        return np.array(rewards_list)
+
+
     def simulate_fluid_balance(self, priority, n, m):
+
         params = self.params
         num_actions, num_states, T, gamma, r, init_occupation, P0, P1, budgets =\
             params["num_actions"], params["num_states"], params["T"], params["gamma"], \
@@ -121,8 +157,10 @@ class fluid_model():
         assert(sum(priority) == num_states * (num_states - 1) // 2)
         assert(isinstance(n, int))
         assert(n > 0)
+        
 
-        def get_pull(states, t, priority, budget):
+        def get_pull(states, t, priority):
+            budget = round(budgets[t] * n)
             assert(isinstance(states, np.ndarray))
             assert(sum(states) == n)
             
@@ -153,33 +191,7 @@ class fluid_model():
             assert(sum(pull) == budget)
             return pull
 
-        rewards_list = []
-        for _ in tqdm(range(m)):
-            rewards = 0
-            states = np.around(init_occupation * n).astype(int)
-            for t in range(T):
-                pull = get_pull(states, t, priority, round(budgets[t] * n))
-                idle = states - pull
-                rewards += (idle @ r[:, 0] + pull @ r[:, 1]) * gamma**t
-
-                # states = pull @ P1 + idle @ P0
-                states = np.zeros((num_states, )).astype(int)
-                for idx, count in enumerate(pull):
-                    tmp = np.random.choice(num_states, count, p=P1[idx])
-                    states += np.histogram(
-                                np.random.choice(num_states, count, p=P1[idx]),
-                                list(range(num_states + 1)))[0]
-                for idx, count in enumerate(idle):
-                    states += np.histogram(
-                                np.random.choice(num_states, count, p=P0[idx]),
-                                list(range(num_states + 1)))[0]
-                        
-                
-                assert(states.shape == (num_states, ))
-                assert(sum(states) == n)
-            rewards_list.append(rewards)
-        return np.array(rewards_list)
-        
+        return self._simu(priority, n, m, get_pull)        
 
 
     def simulate_index(self, priority, n, m):

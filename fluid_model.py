@@ -3,6 +3,7 @@ import gurobipy as gp
 from gurobipy import GRB
 import pandas as pd
 from tqdm import tqdm
+from multiprocessing import Pool
 
 class fluid_model():
     def __init__(self, params):
@@ -210,4 +211,3 @@ class fluid_model():
                 assert(is_greater_than(inactive_reward[idx], active_reward[idx]))
         
         return True, lambd
-        

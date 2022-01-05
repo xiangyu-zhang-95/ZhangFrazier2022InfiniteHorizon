@@ -12,6 +12,13 @@ class fluid_model():
         
         assert(isinstance(num_states, int))
         assert(isinstance(num_actions, int))
+        assert(isinstance(T, int))
+        assert(isinstance(gamma, float))
+        assert(isinstance(r, np.ndarray))
+        assert(isinstance(init_occupation, np.ndarray))
+        assert(isinstance(P0, np.ndarray))
+        assert(isinstance(P1, np.ndarray))
+        assert(isinstance(budgets, list))
         assert(num_actions == 2)
 
         assert(r.shape == (num_states, num_actions))
@@ -20,9 +27,9 @@ class fluid_model():
         assert(np.isclose(1, np.sum(init_occupation)))
 
         assert(P0.shape == (num_states, num_states))
-        assert(np.allclose(P0.sum(axis=1, keepdims=True), 1))
+        assert(np.all(P0.sum(axis=1, keepdims=True) <= 1))
         assert(P1.shape == (num_states, num_states))
-        assert(np.allclose(P1.sum(axis=1, keepdims=True), 1))
+        assert(np.all(P1.sum(axis=1, keepdims=True) <= 1))
 
         assert(len(budgets) == T)
         
